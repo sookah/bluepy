@@ -399,7 +399,7 @@ class Peripheral(BluepyHelper):
     def __exit__(self, type, value, traceback):
         self.disconnect()
 
-    def _getResp(self, wantType, timeout=None):
+    def _getResp(self, wantType, timeout=5):
         if isinstance(wantType, list) is not True:
             wantType = [wantType]
 
@@ -418,7 +418,7 @@ class Peripheral(BluepyHelper):
                 continue
             return resp
 
-    def _connect(self, addr, addrType=ADDR_TYPE_PUBLIC, iface=None):
+    def _connect(self, addr, addrType=ADDR_TYPE_PUBLIC, iface=None, ):
         if len(addr.split(":")) != 6:
             raise ValueError("Expected MAC address, got %s" % repr(addr))
         if addrType not in (ADDR_TYPE_PUBLIC, ADDR_TYPE_RANDOM):
@@ -432,6 +432,10 @@ class Peripheral(BluepyHelper):
         else:
             self._writeCmd("conn %s %s\n" % (addr, addrType))
         rsp = self._getResp('stat')
+
+        if rsp == None:
+            raise BTLEException(BTLEException.DISCONNECTED,
+                                "Failed to connect to peripheral %s, addr type: %s" % (addr, addrType))
         while rsp['state'][0] == 'tryconn':
             rsp = self._getResp('stat')
         if rsp['state'][0] != 'conn':
@@ -444,14 +448,14 @@ class Peripheral(BluepyHelper):
         elif addr is not None:
             self._connect(addr, addrType, iface)
 
-    def disconnect(self):
+    def disconnect(self, timeout = 1):
         if self._helper is None:
             return
         # Unregister the delegate first
         self.setDelegate(None)
 
         self._writeCmd("disc\n")
-        self._getResp('stat')
+        self._getResp('stat', timeout = timeout)
         self._stopHelper()
 
     def discoverServices(self):
@@ -525,9 +529,9 @@ class Peripheral(BluepyHelper):
         ndesc = len(resp['hnd'])
         return [Descriptor(self, resp['uuid'][i], resp['hnd'][i]) for i in range(ndesc)]
 
-    def readCharacteristic(self, handle):
+    def readCharacteristic(self, handle, timeout=None):
         self._writeCmd("rd %X\n" % handle)
-        resp = self._getResp('rd')
+        resp = self._getResp('rd', timeout = timeout)
         return resp['d'][0]
 
     def _readCharacteristicByUUID(self, uuid, startHnd, endHnd):
